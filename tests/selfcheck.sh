@@ -107,6 +107,9 @@ if [ "$probe" = 5 ]; then ok "probe contract present in app.js"; else bad "probe
 
 echo "== webui =="
 APP=$(cat "$MOD/webroot/app.js")
+mver=$(sed -n 's/^version=//p' "$MOD/module.prop")
+aver=$(sed -n 's/.*modver = "\([^"]*\)".*/\1/p' "$MOD/webroot/app.js" | head -1)
+if [ -n "$mver" ] && [ "$mver" = "$aver" ]; then ok "app.js version matches module.prop"; else bad "app.js version matches module.prop" "module.prop=$mver app.js=$aver"; fi
 dupid=$(grep -o 'id="[a-zA-Z0-9_-]*"' "$MOD/webroot/index.html" | sort | uniq -d)
 if [ -z "$dupid" ]; then ok "no duplicate ids in index.html"; else bad "duplicate ids in index.html" "$dupid"; fi
 for c in apply cpreset dvreset refresh bootdiff doctor cmode dmode loglines; do

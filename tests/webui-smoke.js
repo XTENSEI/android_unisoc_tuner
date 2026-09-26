@@ -53,8 +53,8 @@ const DVFS_STATUS = [
   "ndv=2",
 ].join("\n") + "\n";
 
-const WHERE = "dir=/data/adb/modules/unisoc-tuner\nver=v0.4.0\ncpu=1\ndv=1\ndoc=1\n";
-const LOG = "09-27 10:00:01 service boot, module v0.4.0\n09-27 10:00:02 tuner apply done mode=auto\n";
+const WHERE = "dir=/data/adb/modules/unisoc-tuner\nver=v9.9.9-smoke\ncpu=1\ndv=1\ndoc=1\n";
+const LOG = "09-27 10:00:01 service boot, module v9.9.9-smoke\n09-27 10:00:02 tuner apply done mode=auto\n";
 const REPORT = "-- notes --\n  nothing unusual\n";
 
 // ---- recorder --------------------------------------------------------------
@@ -159,7 +159,7 @@ const pump = (ms) => new Promise((r) => setTimeout(r, ms || 40));
     bad("every api call carries the token");
   }
 
-  has("version line names the install", ids.ver.textContent, "v0.4.0 / server");
+  has("version line names the install", ids.ver.textContent, "v9.9.9-smoke / server");
   eq("gpu mode select follows status", ids.mode.children.filter((o) => o.selected).map((o) => o.value).join(","), "auto");
   eq("gpu mode select lists every mode", ids.mode.children.length, 5);
   eq("freq input follows status", ids.freq.value, "850000000");
