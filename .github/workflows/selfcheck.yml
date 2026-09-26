@@ -1,0 +1,22 @@
+name: selfcheck
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selfcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run selfcheck gate
+        run: |
+          export PATH=/usr/bin:/bin:/usr/local/bin:/usr/games:/usr/local/sbin:/usr/sbin
+          sh tests/selfcheck.sh
+        shell: bash
