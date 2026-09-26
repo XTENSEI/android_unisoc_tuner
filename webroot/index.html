@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unisoc Tuner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <header id="head">
+    <h1>Unisoc Tuner</h1>
+    <div id="ver"></div>
+  </header>
+  <section id="gpu">
+    <h2>GPU</h2>
+    <div class="grid">
+      <div class="cell"><label for="mode">mode</label><select id="mode"></select></div>
+      <div class="cell"><label for="freq">freq</label><input id="freq"></div>
+      <div class="cell"><label for="poll">poll</label><input id="poll"></div>
+      <div class="cell"><label for="boost">boost</label><input id="boost"></div>
+      <div class="cell"><button id="apply">apply</button></div>
+    </div>
+    <pre id="live"></pre>
+  </section>
+  <section id="cpu">
+    <h2>CPU</h2>
+    <div class="grid">
+      <div class="cell"><label for="cmode">mode</label><select id="cmode"></select></div>
+      <div class="cell"><button id="cpreset">reset</button></div>
+    </div>
+    <div id="cpuclusters"></div>
+  </section>
+  <section id="dv">
+    <h2>Memory / media</h2>
+    <div class="grid">
+      <div class="cell"><label for="dmode">mode</label><select id="dmode"></select></div>
+      <div class="cell"><button id="dvreset">reset</button></div>
+    </div>
+    <div id="devfreq"></div>
+  </section>
+  <section id="system">
+    <h2>System</h2>
+    <div class="grid">
+      <button id="apply">apply</button>
+      <button id="poll">reread log</button>
+    </div>
+    <div class="rows">
+      <label>log <input id="loglines" type="number" min="1" max="100" value="20"></label>
+      <button id="bootdiff">compare boots</button>
+      <button id="doctor">doctor</button>
+    </div>
+    <pre id="out"></pre>
+    <pre id="msg"></pre>
+  </section>
+  <footer id="foot">
+    <button id="refresh">refresh</button>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
