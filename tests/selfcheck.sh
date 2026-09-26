@@ -127,6 +127,29 @@ else
   echo "skip webui smoke (no node)"
 fi
 
+echo "== packaging =="
+if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+  P=$T/pkg
+  if sh "$MOD/build.sh" "$P" > "$T/pkg.out" 2>&1; then
+    z=$(ls "$P"/*.zip 2>/dev/null | head -1)
+    if [ -n "$z" ]; then ok "build.sh produced a zip"; else bad "build.sh produced a zip" "$(cat "$T/pkg.out")"; fi
+    zl=$(unzip -Z1 "$z" 2>/dev/null)
+    has "zip carries module.prop" "$zl" "module.prop"
+    has "zip carries the action hook" "$zl" "action.sh"
+    has "zip carries the scripts" "$zl" "bin/tuner.sh"
+    has "zip carries the watchdog" "$zl" "bin/watchdog.sh"
+    has "zip carries the page" "$zl" "webroot/index.html"
+    has "zip carries uninstall.sh" "$zl" "uninstall.sh"
+    lacks "zip leaves the tests out" "$zl" "tests/"
+    lacks "zip leaves the ci out" "$zl" ".github"
+    lacks "zip leaves the build script out" "$zl" "build.sh"
+  else
+    bad "build.sh runs" "$(cat "$T/pkg.out")"
+  fi
+else
+  echo "skip packaging (no zip)"
+fi
+
 echo "== gpu (tuner.sh) =="
 o=$(rung status); show "tuner.sh status" "$o"
 has "status reports mode" "$o" "mode="
