@@ -16,3 +16,9 @@ pre { background: #000; padding: 8px; overflow: auto; font-size: 0.85em; }
 #foot button { margin: 4px; }
 .rows { display: flex; gap: 8px; flex-wrap: wrap; }
 .rows label { flex: 1 1 120px; }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0 0; }
+.row .head { flex: 1 1 100%; font-size: 0.85em; color: #9d9; }
+.row select, .row input { flex: 0 1 170px; width: auto; }
+.row button { flex: 0 0 auto; }
+#msg { color: #7cf; }
+#live { white-space: pre-wrap; }

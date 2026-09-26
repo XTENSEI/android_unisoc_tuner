@@ -105,6 +105,28 @@ done
 probe=$(grep -c 'moddir[[:space:]]*=\|modver[[:space:]]*=\|modcpu[[:space:]]*=\|moddv[[:space:]]*=\|moddoc[[:space:]]*=' "$MOD/webroot/app.js" 2>/dev/null)
 if [ "$probe" = 5 ]; then ok "probe contract present in app.js"; else bad "probe contract" "found $probe of 5 markers"; fi
 
+echo "== webui =="
+APP=$(cat "$MOD/webroot/app.js")
+dupid=$(grep -o 'id="[a-zA-Z0-9_-]*"' "$MOD/webroot/index.html" | sort | uniq -d)
+if [ -z "$dupid" ]; then ok "no duplicate ids in index.html"; else bad "duplicate ids in index.html" "$dupid"; fi
+for c in apply cpreset dvreset refresh bootdiff doctor cmode dmode loglines; do
+  has "app.js wires $c" "$APP" "el(\"$c\").addEventListener"
+done
+for s in tuner system dvfs doctor; do
+  has "app.js runs $s.sh" "$APP" "\"$s\""
+done
+has "app.js uses the manager bridge" "$APP" "bridge.exec("
+has "app.js registers the named shell callback" "$APP" "window[name] = ("
+has "app.js speaks to serve.sh" "$APP" "/api?t="
+has "app.js asks where the module is" "$APP" "/where?t="
+lacks "app.js dropped the positional callback" "$APP" "bridge.exec(cmd, (e, o)"
+
+if command -v node >/dev/null 2>&1; then
+  if node "$MOD/tests/webui-smoke.js" > "$T/webui.out" 2>&1; then ok "webui smoke passes in node"; else bad "webui smoke passes in node" "$(cat "$T/webui.out")"; fi
+else
+  echo "skip webui smoke (no node)"
+fi
+
 echo "== gpu (tuner.sh) =="
 o=$(rung status); show "tuner.sh status" "$o"
 has "status reports mode" "$o" "mode="

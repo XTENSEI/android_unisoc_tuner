@@ -16,8 +16,8 @@
     <h2>GPU</h2>
     <div class="grid">
       <div class="cell"><label for="mode">mode</label><select id="mode"></select></div>
-      <div class="cell"><label for="freq">freq</label><input id="freq"></div>
-      <div class="cell"><label for="poll">poll</label><input id="poll"></div>
+      <div class="cell"><label for="freq">freq (hz)</label><input id="freq"></div>
+      <div class="cell"><label for="poll">poll (ms)</label><input id="poll"></div>
       <div class="cell"><label for="boost">boost</label><input id="boost"></div>
       <div class="cell"><button id="apply">apply</button></div>
     </div>
@@ -41,10 +41,6 @@
   </section>
   <section id="system">
     <h2>System</h2>
-    <div class="grid">
-      <button id="apply">apply</button>
-      <button id="poll">reread log</button>
-    </div>
     <div class="rows">
       <label>log <input id="loglines" type="number" min="1" max="100" value="20"></label>
       <button id="bootdiff">compare boots</button>
