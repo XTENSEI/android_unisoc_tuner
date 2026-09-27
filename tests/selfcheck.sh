@@ -265,6 +265,14 @@ printf "2000000\n" > $wdcpu/cpufreq/policy1/scaling_max_freq
 printf "768000000 1536000000\n" > $wddv/scene-frequency/available_frequencies
 printf "sprd-governor performance powersave\n" > $wddv/scene-frequency/available_governors
 printf "sprd-governor\n" > $wddv/dpu-dvfs/available_governors
+printf "384000 614400 1200000 1800000 2000000\n" > $wdcpu/cpufreq/policy0/scaling_available_frequencies
+printf "schedutil performance powersave\n" > $wdcpu/cpufreq/policy0/scaling_available_governors
+printf "614400 1200000 1800000 2000000\n" > $wdcpu/cpufreq/policy1/scaling_available_frequencies
+printf "schedutil performance\n" > $wdcpu/cpufreq/policy1/scaling_available_governors
+printf "384000000 512000000 614400000 768000000 850000000\n" > $wdgpu/available_frequencies
+printf "performance simple_ondemand userspace powersave\n" > $wdgpu/available_governors
+printf "50\n" > $wdgpu/polling_interval
+printf "Total transition : 100\n" > $wdgpu/trans_stat
 
 wsep="env UT_D=$wdgpu UT_P=$wdp UT_CPU=$wdcpu UT_DEVFREQ=$wddv UT_THERMAL=$wdth UT_TMP=$wtmp UT_LOG=$LOG"
 $wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
@@ -274,20 +282,73 @@ printf "160000\n" > $wdgpu/thermald_max_freq
 $wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
 wcap=$(cat $wdgpu/thermald_max_freq 2>/dev/null)
 has "watchdog re-applies drifted ceiling (verified)" "$wcap" "200000"
+printf "1200000\n" > $wdcpu/cpufreq/policy0/scaling_max_freq
+$wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
+wcmax=$(cat $wdcpu/cpufreq/policy0/scaling_max_freq 2>/dev/null)
+has "watchdog restores the cpu ceiling (verified)" "$wcmax" "2000000"
+
+mkdir -p $wdth/thermal_zone0
+printf "47500\n" > $wdth/thermal_zone0/temp
+rm -f $T/tmp/unisoc-tuner.ceil.* $T/tmp/unisoc-tuner.zones.*
+$wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
+wzones=$(cat $T/tmp/unisoc-tuner.zones.* 2>/dev/null || echo "")
+has "watchdog records thermal zones" "$wzones" "47500"
+lacks "thermal zones stay out of the ceilings" "$(cat $T/tmp/unisoc-tuner.ceil.* 2>/dev/null)" "thermal_zone"
+printf "60000\n" > $wdth/thermal_zone0/temp
+$wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
+wztemp=$(cat $wdth/thermal_zone0/temp 2>/dev/null)
+has "watchdog leaves a drifted zone alone (verified)" "$wztemp" "60000"
+lacks "the watchdog never writes a temperature" "$(cat "$LOG")" "write temp="
+
+$wsep sh $MOD/bin/watchdog.sh status > /dev/null 2>&1
+wceil=$(ls $T/tmp/unisoc-tuner.ceil.* 2>/dev/null | head -1)
+env UT_D=$wdgpu UT_P=$wdp UT_TMP=$wtmp UT_LOG=$LOG UT_CONF=$T/tmp/watch.tuner.conf \
+  sh $MOD/bin/tuner.sh set MODE cap > /dev/null 2>&1
+if [ -n "$wceil" ] && [ ! -f "$wceil" ]; then ok "a module write invalidates the watchdog reference"; else bad "a module write invalidates the watchdog reference" "ceil=$wceil"; fi
 
 rvgpu=$T/sys/devfreq/23100000.gpu
-$rsep sh $MOD/bin/doctor.sh drift > /dev/null 2>&1
+rm -f $T/tmp/ut.doctor.prev $T/tmp/ut.doctor.state
+$wsep sh $MOD/bin/doctor.sh drift > /dev/null 2>&1
+if cmp -s $T/tmp/ut.doctor.state $T/tmp/ut.doctor.prev; then
+  ok "drift promotes this boot record as the next baseline"
+else
+  bad "drift promotes this boot record as the next baseline" "state and prev differ"
+fi
+lacks "drift state skips the volatile cur_freq" "$(cat $T/tmp/ut.doctor.state 2>/dev/null)" "cur_freq"
 mv $rvgpu $T/tmp/moved.gpu
-$rsep sh $MOD/bin/doctor.sh drift > /dev/null 2>&1
-wdiag=$(sh $MOD/bin/doctor.sh drift 2>&1)
-has "doctor drift reports missing node (verified)" "yes" "yes"
+wdiag=$($wsep sh $MOD/bin/doctor.sh drift 2>&1)
+has "doctor drift reports the moved node (verified)" "$wdiag" "gone or moved"
 mv $T/tmp/moved.gpu $rvgpu 2>/dev/null
+$wsep sh $MOD/bin/doctor.sh drift > /dev/null 2>&1
+printf "400000\n" > $wdgpu/thermald_max_freq
+wdiag2=$($wsep sh $MOD/bin/doctor.sh drift 2>&1)
+has "doctor drift reports a changed value (verified)" "$wdiag2" "changed"
+printf "200000\n" > $wdgpu/thermald_max_freq
+
+echo "== entry points from a foreign cwd =="
+ecwd=$T/ecwd
+mkdir -p $ecwd
+elog=$T/entry.log
+esep="env UT_D=$wdgpu UT_P=$wdp UT_CPU=$wdcpu UT_DEVFREQ=$wddv UT_THERMAL=$wdth UT_TMP=$wtmp UT_LOG=$elog UT_CONF=$T/tmp/entry.conf"
+( cd $ecwd && $esep sh "$MOD/service.sh" ) > $T/entry.out 2>&1
+has "service.sh finds its scripts from any cwd (verified)" "$(cat $elog 2>/dev/null)" "tuner apply rc=0"
+act=$( cd $ecwd && env UT_D=$wdgpu UT_P=$wdp UT_CONF=$T/tmp/act.conf UT_TMP=$wtmp UT_LOG=$elog sh "$MOD/action.sh" 2>&1 )
+has "action.sh cycles the gpu mode from any cwd (verified)" "$act" "GPU mode:"
+wdoc=$( cd $ecwd && env UT_TMP=$wtmp UT_LOG=$elog sh "$MOD/bin/doctor.sh" watchdog 2>&1 )
+has "doctor.sh finds the watchdog from any cwd (verified)" "$wdoc" "cap watchdog"
+lacks "no path errors leak out of the doctor watchdog section" "$wdoc" "No such file"
+
+# the drive tests above applied modes to the fake tree: put the caps back so the
+# live webui test reads a known device
+printf "200000\n" > $wdgpu/thermald_max_freq
+printf "200000\n" > $wdgpu/bcl_max_freq
+rm -f $T/tmp/unisoc-tuner.ceil.* $T/tmp/unisoc-tuner.zones.*
 
 echo "== standalone server =="
 if command -v nc >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
   PORT=$((20000 + ($$ % 20000)))
-  SEP="env UT_PORT=$PORT UT_TMP=$T/tmp UT_LOG=$LOG"
-  $SEP sh "$MOD/bin/serve.sh" start > "$T/start.txt" 2>&1
+  SEP="env UT_PORT=$PORT UT_TMP=$T/tmp UT_LOG=$LOG UT_D=$wdgpu UT_P=$wdp UT_CPU=$wdcpu UT_DEVFREQ=$wddv UT_THERMAL=$wdth UT_CONF=$T/tmp/live.conf"
+  ( cd $ecwd && $SEP sh "$MOD/bin/serve.sh" start ) > "$T/start.txt" 2>&1
   TOK=$(cat "$T/tmp/ut.serve.token" 2>/dev/null)
   get() {
     i=0
@@ -306,6 +367,16 @@ if command -v nc >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
   has "bad token rejected" "$(get "http://127.0.0.1:$PORT/api?t=nope&run=tuner&args=status")" "token"
   has "unknown script rejected" "$(get "http://127.0.0.1:$PORT/api?t=$TOK&run=nope&args=status")" "unknown script"
   has "bad args rejected" "$(get "http://127.0.0.1:$PORT/api?t=$TOK&run=tuner&args=set%20MODE%3Brm")" "bad characters"
+  if command -v node >/dev/null 2>&1; then
+    if UT_LIVE_URL="http://127.0.0.1:$PORT/?t=$TOK" UT_LIVE_GPU=$wdgpu UT_LIVE_CPU=$wdcpu UT_LIVE_LOG=$LOG \
+       node "$MOD/tests/webui-live.js" > "$T/live.out" 2>&1; then
+      ok "live webui drives the server end to end"
+    else
+      bad "live webui drives the server end to end" "$(cat "$T/live.out")"
+    fi
+  else
+    echo "skip live webui (no node)"
+  fi
   $SEP sh "$MOD/bin/serve.sh" stop >/dev/null 2>&1
 else
   echo "skip standalone server (needs nc and curl)"

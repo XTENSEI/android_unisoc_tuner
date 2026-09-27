@@ -10,7 +10,7 @@
 HERE=${0%/*}
 [ -d "$HERE" ] || HERE=.
 case "$HERE" in
-  */bin) MODDIR=${UT_MODDIR:-$(dirname "$(dirname "$HERE")")} ;;
+  */bin) MODDIR=${UT_MODDIR:-$(dirname "$HERE")} ;;
   *)     MODDIR=${UT_MODDIR:-$HERE} ;;
 esac
 
@@ -40,7 +40,6 @@ hunt() {
   echo "- $1:"
   if [ -n "$hits" ]; then
     for h in $hits; do
-      h=$(basename "$h")
       echo "  $h = $(val "$h")  [$(perm "$h")]"
     done
   else
@@ -55,17 +54,30 @@ nc_state() {
   fi
 }
 
+# the kernel boot id is stable inside a boot and differs between boots, so the
+# per-boot files are scoped to it (no dependency on od being installed)
+bootid() {
+  for f in /proc/sys/kernel/random/boot_id /proc/sys/kernel/random/uuid; do
+    if [ -r "$f" ]; then
+      tr -d '-' < "$f" 2>/dev/null
+      return 0
+    fi
+  done
+  head -c 8 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n'
+}
+
 BOOTIDF=$TMPD/unisoc-tuner.bootid
 BOOTID=
 [ -f "$BOOTIDF" ] && BOOTID=$(cat "$BOOTIDF" 2>/dev/null)
-[ -n "$BOOTID" ] || BOOTID=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+[ -n "$BOOTID" ] || BOOTID=$(bootid)
+[ -n "$BOOTID" ] || BOOTID=unknown
 echo "$BOOTID" > "$BOOTIDF" 2>/dev/null
 
 STATE=$TMPD/ut.doctor.state
 
 record_nodes() {
   : > "$STATE"
-  for f in "$D"/governor "$D"/cur_freq "$D"/min_freq "$D"/max_freq \
+  for f in "$D"/governor "$D"/min_freq "$D"/max_freq \
            "$D"/thermald_max_freq "$D"/bcl_max_freq \
            "$P"/gpu_boost_level2 \
            "$CPU"/cpufreq/policy0/scaling_governor "$CPU"/cpufreq/policy0/scaling_max_freq \
@@ -86,22 +98,27 @@ compare_state() {
   echo "missing or moved (in the last boot, not the current one):"
   sort "$PREV_STATE" > "$TMPD"/psort 2>/dev/null
   sort "$STATE" > "$TMPD"/ssort 2>/dev/null
-  [ -f "$TMPD/psort" ] && [ -f "$TMPD/ssort" ] && comm -23 "$TMPD/psort" "$TMPD/ssort" | while read -r p o m; do
-    b=$(basename "$p")
-    echo "  - $b -> gone or moved"
-  done
+  gone=$(comm -23 "$TMPD/psort" "$TMPD/ssort" 2>/dev/null | awk '{print $1}')
+  if [ -n "$gone" ]; then
+    printf '%s\n' "$gone" | sed 's/^/  - gone or moved /'
+  else
+    echo "  (none)"
+  fi
   rm -f "$TMPD/psort" "$TMPD/ssort"
-  echo "  (none)"
   echo
   echo "content drift (same path, different contents):"
+  ndrift=0
   for p in $(awk '{print $1}' "$STATE"); do
     if [ -e "$p" ]; then
       c=$(md5 "$p")
       o=$(awk -v k="$p" '$1 == k {print $2}' "$PREV_STATE")
-      [ -n "$o" ] && [ "$c" != "$o" ] && echo "  changed $p"
+      if [ -n "$o" ] && [ "$c" != "$o" ]; then
+        printf '  changed %s\n' "$p"
+        ndrift=$((ndrift + 1))
+      fi
     fi
   done
-  echo "  (none)"
+  [ "$ndrift" -gt 0 ] || echo "  (none)"
 }
 
 bootdiff() {
@@ -279,14 +296,14 @@ case "$1" in
   logold)
     if [ -f "$LOG.old" ]; then tail -n "${2:-30}" "$LOG.old"; else echo "no previous boot log"; fi ;;
   drift)
-    PREV_STATE=$TMPD/ut.doctor.prev
-    if [ -f "$PREV_STATE" ]; then
-      PREV_STATE_CP=$TMPD/ut.doctor.prev.$(date +%s)
-      cp "$PREV_STATE" "$PREV_STATE_CP"
-      PREV_STATE=$PREV_STATE_CP
-    fi
+    # compare this boot against the last one, then promote this boot's record so
+    # the next boot has something to compare with
+    PREV_STATE=$TMPD/ut.doctor.prev.before
+    if [ -f "$TMPD/ut.doctor.prev" ]; then cp "$TMPD/ut.doctor.prev" "$PREV_STATE"; fi
     record_nodes
     compare_state
+    rm -f "$PREV_STATE"
+    cp "$STATE" "$TMPD/ut.doctor.prev" 2>/dev/null
     ;;
   watchdog)
     sh "$MODDIR/bin/watchdog.sh" doctor

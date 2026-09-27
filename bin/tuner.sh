@@ -22,6 +22,8 @@ CAPUNIT=
 rd() { cat "$1" 2>/dev/null; }
 num() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
 log() { [ -n "$LOG" ] || return 0; echo "$(date '+%m-%d %H:%M:%S') $LNAME $*" >> "$LOG" 2>/dev/null; return 0; }
+nap() { sleep "$1" 2>/dev/null || sleep 1; }
+
 short() { case "$1" in "$D"/*) echo "${1#$D/}" ;; "$P"/*) echo "${1#$P/}" ;; *) echo "$1" ;; esac; }
 
 wr() {
@@ -40,11 +42,15 @@ wr_wait() {
       log "write $(short "$1")=$2 after $i retries"
       return 0
     fi
-    sleep 0.2; i=$((i + 1))
+    nap 0.2; i=$((i + 1))
   done
   log "fail $(short "$1")=$2 (node never appeared)"
   return 1
 }
+
+# any write from the module invalidates the watchdog reference, so the next
+# run re-seeds it from the value the module just applied
+unwatch() { rm -f "$TMPD"/unisoc-tuner.ceil.* 2>/dev/null; return 0; }
 
 save() {
   { echo "MODE=$MODE"; echo "FREQHZ=$FREQHZ"; echo "POLLMS=$POLLMS"
@@ -61,11 +67,11 @@ cap_unit() {
 set_cap() {
   want=$1
   if [ -z "$CAPUNIT" ]; then
-    wr $D/thermald_max_freq $((want / 1000)); sleep 0.3
+    wr $D/thermald_max_freq $((want / 1000)); nap 0.3
     if [ "$(num "$(rd $D/max_freq)")" = "$want" ]; then
       CAPUNIT=1000
     else
-      wr $D/thermald_max_freq "$want"; sleep 0.3
+      wr $D/thermald_max_freq "$want"; nap 0.3
       if [ "$(num "$(rd $D/max_freq)")" = "$want" ]; then CAPUNIT=1; fi
     fi
     log "cap unit detected $(cap_unit)"
@@ -79,6 +85,7 @@ set_cap() {
 apply() {
   [ -e "$D" ] || { echo "err=no devfreq node"; log "fail apply: $D missing"; return 1; }
   log "apply mode=$MODE freq=$FREQHZ poll=$POLLMS boost=$BOOST capunit=${CAPUNIT:-auto}"
+  unwatch
   case "$MODE" in
     auto)
       wr $D/governor simple_ondemand
@@ -126,7 +133,7 @@ dwell() {
   n=$((secs * 10)); i=0; f=$TMPD/ut.dwell.$$
   a=$(num "$(transitions)")
   : > "$f"
-  while [ $i -lt $n ]; do rd $D/cur_freq >> "$f"; sleep 0.1; i=$((i + 1)); done
+  while [ $i -lt $n ]; do rd $D/cur_freq >> "$f"; nap 0.1; i=$((i + 1)); done
   echo "window=$secs"
   echo "trans_delta=$(( $(num "$(transitions)") - a ))"
   sort -n "$f" | uniq -c | while read c hz; do echo "dwell=$(($(num "$hz") / 1000000)):$c"; done
@@ -158,8 +165,9 @@ setkv() {
 
 reset() {
   log "reset to vendor defaults"
+  unwatch
   wr $D/governor simple_ondemand
-  sleep 0.5
+  nap 0.5
   set_cap $MAXHZ
   wr $P/gpu_boost_level2 0
   MODE=stock; FREQHZ=850000000; POLLMS=100; BOOST=0

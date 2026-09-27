@@ -6,6 +6,7 @@
 CPU=${UT_CPU:-/sys/devices/system/cpu}
 DEVFREQ=${UT_DEVFREQ:-/sys/class/devfreq}
 THERMAL=${UT_THERMAL:-/sys/class/thermal}
+TMPD=${UT_TMP:-/data/local/tmp}
 CONF=${UT_CONF:-/data/adb/unisoc-tuner-sys.conf}
 LOG=${UT_LOG:-/data/adb/unisoc-tuner.log}
 LNAME=cpu
@@ -24,6 +25,10 @@ policies() { ls -d $CPU/cpufreq/policy* 2>/dev/null; }
 freqs_of() { rd "$1/scaling_available_frequencies" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -n | tr '\n' ' '; }
 govs_of() { rd "$1/scaling_available_governors" | tr '\n' ' '; }
 max_avail() { freqs_of "$1" | tr ' ' '\n' | grep -E '^[0-9]+$' | tail -1; }
+
+# any write from the module invalidates the watchdog reference, so the next
+# run re-seeds it from the value the module just applied
+unwatch() { rm -f "$TMPD"/unisoc-tuner.ceil.* 2>/dev/null; return 0; }
 
 wr() {
   [ -e "$1" ] || { log "fail $(short "$1") missing"; return 1; }
@@ -81,6 +86,7 @@ status() {
 }
 
 apply() {
+  unwatch
   if [ "$MODE" = stock ]; then log "stock mode, nothing written"; return 0; fi
   log "apply mode=$MODE"
   i=0

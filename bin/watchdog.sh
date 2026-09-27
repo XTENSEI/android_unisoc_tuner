@@ -6,7 +6,7 @@
 HERE=${0%/*}
 [ -d "$HERE" ] || HERE=.
 case "$HERE" in
-  */bin) MODDIR=${UT_MODDIR:-$(dirname "$(dirname "$HERE")")} ;;
+  */bin) MODDIR=${UT_MODDIR:-$(dirname "$HERE")} ;;
   *)     MODDIR=${UT_MODDIR:-$HERE} ;;
 esac
 
@@ -19,10 +19,23 @@ LOG=${UT_LOG:-/data/adb/unisoc-tuner.log}
 TMPD=${UT_TMP:-/data/local/tmp}
 LNAME=watch
 
+# the kernel boot id is stable inside a boot and differs between boots, so the
+# per-boot files are scoped to it (no dependency on od being installed)
+bootid() {
+  for f in /proc/sys/kernel/random/boot_id /proc/sys/kernel/random/uuid; do
+    if [ -r "$f" ]; then
+      tr -d '-' < "$f" 2>/dev/null
+      return 0
+    fi
+  done
+  head -c 8 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n'
+}
+
 BOOTIDF=$TMPD/unisoc-tuner.bootid
 BOOTID=
 [ -f "$BOOTIDF" ] && BOOTID=$(cat "$BOOTIDF" 2>/dev/null)
-[ -n "$BOOTID" ] || BOOTID=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+[ -n "$BOOTID" ] || BOOTID=$(bootid)
+[ -n "$BOOTID" ] || BOOTID=unknown
 echo "$BOOTID" > "$BOOTIDF" 2>/dev/null
 
 # Persistent per-boot reference: records each node's ORIGINAL kernel value once,
@@ -31,18 +44,15 @@ echo "$BOOTID" > "$BOOTIDF" 2>/dev/null
 # cleared at reset. A later daemon drift cannot overwrite the pristine
 # reference and the re-apply is a real correction.
 CEIL=$TMPD/unisoc-tuner.ceil.$BOOTID
+# thermal zones are reference only: they are read only, and writing a recorded
+# temperature back into a zone would be nonsense
+ZREF=$TMPD/unisoc-tuner.zones.$BOOTID
 
 rd() { cat "$1" 2>/dev/null; }
 num() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
+lines() { [ -f "$1" ] && wc -l < "$1" 2>/dev/null | tr -d ' ' || echo 0; }
 L() { echo "$(date '+%m-%d %H:%M:%S') $LNAME $*" >> "$LOG" 2>/dev/null; return 0; }
 log() { L "$*"; }
-
-capunit() {
-  if [ -n "${CAPUNIT:-}" ]; then echo "$CAPUNIT"; return; fi
-  v=$(cat "$D"/thermald_max_freq 2>/dev/null)
-  if [ -n "$v" ] && [ "$v" -ge 100000000 ] 2>/dev/null; then CAPUNIT=1; echo 1
-  else CAPUNIT=1000; echo 1000; fi
-}
 
 wr() {
   [ -e "$1" ] || { log "fail $(basename "$1") missing"; return 1; }
@@ -71,19 +81,27 @@ seed_ceils() {
       fi
     fi
   done
-  for f in "$TH"/thermal_zone*; do
+  # the cpu ceilings the module just applied: seeded here so a later thermal or
+  # bcl write is corrected back to what the module decided, not to the drift
+  for p in $(ls -d "$UT_CPU"/cpufreq/policy* 2>/dev/null); do
+    f=$p/scaling_max_freq
     [ -e "$f" ] || continue
-    n=$(cat "$f"/temp 2>/dev/null)
+    n=$(cat "$f" 2>/dev/null)
     if ! grep -q "^$f " "$CEIL" 2>/dev/null; then
       printf '%s %s\n' "$f" "$n" >> "$CEIL"
     fi
   done
+  for f in "$TH"/thermal_zone*; do
+    [ -e "$f" ] || continue
+    n=$(cat "$f"/temp 2>/dev/null)
+    if ! grep -q "^$f " "$ZREF" 2>/dev/null; then
+      printf '%s %s\n' "$f" "$n" >> "$ZREF"
+    fi
+  done
 }
 
-record() { printf '%s %s\n' "$1" "$2" >> "$CEIL"; }
-
 apply_ceils() {
-  n=$(wc -l < "$CEIL" 2>/dev/null | tr -d ' ')
+  n=$(lines "$CEIL")
   i=0
   while [ $i -lt $n ]; do
     f=$(sed -n "$((i + 1))p" "$CEIL" | cut -d' ' -f1)
@@ -97,21 +115,9 @@ apply_ceils() {
   done
 }
 
-apply_cpu() {
-  for p in $(ls -d "$UT_CPU"/cpufreq/policy* 2>/dev/null); do
-    if [ -e "$p/scaling_max_freq" ]; then
-      m=$(cat "$p"/scaling_max_freq 2>/dev/null)
-      if [ -n "$m" ] && [ "$m" -gt 0 ] 2>/dev/null; then
-        wr "$p/scaling_max_freq" "$m"
-      fi
-    fi
-  done
-}
-
 main_loop() {
   seed_ceils
   apply_ceils
-  apply_cpu
 }
 
 case "$1" in
@@ -119,7 +125,8 @@ case "$1" in
     echo "unisoc tuner cap watchdog"
     echo "kernel $(uname -r)"
     echo "bootid $BOOTID"
-    echo "ceil records: $(wc -l < "$CEIL" | tr -d ' ')"
+    echo "ceil records: $(lines "$CEIL")"
+    echo "thermal records: $(lines "$ZREF")"
     echo
     echo "-- gpu --"
     if [ -d "$D" ]; then
@@ -157,14 +164,15 @@ case "$1" in
     echo "  devices=$n"
     ;;
   reset)
-    rm -f "$CEIL" "$BOOTIDF"
+    rm -f "$CEIL" "$ZREF" "$BOOTIDF"
     log "reset (next boot re-seeds)"
     echo "watchdog reset"
     ;;
   status)
     main_loop
     echo "watchdog audit, bootid=$BOOTID"
-    echo "records: $(wc -l < "$CEIL" | tr -d ' ')"
+    echo "records: $(lines "$CEIL")"
+    echo "thermal: $(lines "$ZREF")"
     cat "$CEIL" | sed 's/^/  /'
     ;;
   *)

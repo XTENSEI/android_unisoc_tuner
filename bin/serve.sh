@@ -7,10 +7,10 @@
 # response from $FIFO, which keeps the two directions on separate descriptors
 # (a plain shell pipeline can only wire one of them).
 
-HERE=${0%*}
+HERE=${0%/*}
 [ -d "$HERE" ] || HERE=.
 case "$HERE" in
-  */bin) MODDIR=${UT_MODDIR:-$(dirname "$(dirname "$HERE")")} ;;
+  */bin) MODDIR=${UT_MODDIR:-$(dirname "$HERE")} ;;
   *)     MODDIR=${UT_MODDIR:-$HERE} ;;
 esac
 
@@ -26,7 +26,22 @@ FIFO=$TMPD/ut.serve.fifo
 RUNS="tuner system dvfs doctor"
 
 tok() { [ -f "$TOKF" ] && cat "$TOKF" 2>/dev/null; }
-newtok() { head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+# the token has to exist even on a build without od, so ask the kernel first
+newtok() {
+  t=
+  # ask the kernel first: od is not guaranteed to be installed
+  if [ -r /proc/sys/kernel/random/uuid ]; then
+    t=$(tr -d "\n-" < /proc/sys/kernel/random/uuid 2>/dev/null)
+  fi
+  if [ -z "$t" ]; then
+    t=$(head -c 12 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d " \n")
+  fi
+  [ -n "$t" ] || t=$(date +%s)$$
+  echo "$t"
+}
+nap() { sleep "$1" 2>/dev/null || sleep 1; }
+
+
 url() { echo "http://127.0.0.1:$PORT/?t=$(tok)"; }
 L() { echo "$(date '+%m-%d %H:%M:%S') serve $*" >> "$LOGF" 2>/dev/null; return 0; }
 
@@ -115,7 +130,7 @@ send() {
 }
 
 flush_fifo() {
-  ( cat <&3 >/dev/null 2>&1 & c=$!; sleep 0.2; kill $c 2>/dev/null ) 2>/dev/null
+  ( cat <&3 >/dev/null 2>&1 & c=$!; nap 0.2; kill $c 2>/dev/null ) 2>/dev/null
   return 0
 }
 
@@ -148,17 +163,23 @@ serve_loop() {
       cur=$(wc -c < "$REQF" 2>/dev/null | tr -d ' ')
       [ -n "$cur" ] && [ "$cur" != 0 ] && [ "$cur" = "$prev" ] && break
       prev=$cur
-      sleep 0.1; i=$((i + 1))
+      nap 0.1; i=$((i + 1))
     done
 
+    served=0
     if [ -n "$(sed -n '1p' "$REQF" 2>/dev/null)" ]; then
-      if ! send "$REQF" >&3; then
-        flush_fifo
-      fi
+      if send "$REQF" >&3; then served=1; else flush_fifo; fi
+      # let netcat flush, then close the connection ourselves: a client that
+      # pools the socket (browsers do) would otherwise leave the next request
+      # refused until it decides to close, and the listener only comes back
+      # when netcat exits
+      nap 0.1
+      kill "$ncp" 2>/dev/null
     fi
 
     wait "$ncp" 2>/dev/null
-    if [ $? != 0 ]; then
+    st=$?
+    if [ "$served" != 1 ] && [ "$st" != 0 ]; then
       if [ "$pflag" = 1 ]; then pflag=0; else pflag=1; fi
       sleep 1
     fi
@@ -176,7 +197,10 @@ start() {
   fi
   newtok > "$TOKF" 2>/dev/null
   chmod 600 "$TOKF" 2>/dev/null
-  sh "$0" loop >> "$OUTF" 2>&1 &
+  # detach so the server survives the shell that started it
+  N=
+  command -v nohup >/dev/null 2>&1 && N=nohup
+  $N sh "$0" loop >> "$OUTF" 2>&1 < /dev/null &
   echo $! > "$PIDF"
   sleep 1
   if kill -0 "$(cat "$PIDF" 2>/dev/null)" 2>/dev/null; then

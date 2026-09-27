@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # rotation + boot apply audit: every write and every failure lands in the log
-MODDIR=${0%*}
+MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR=.
 LOG=${UT_LOG:-/data/adb/unisoc-tuner.log}
 D=${UT_D:-/sys/class/devfreq/23100000.gpu}

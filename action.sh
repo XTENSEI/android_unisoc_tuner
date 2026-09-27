@@ -1,5 +1,5 @@
 #!/system/bin/sh
-MODDIR=${0%*}
+MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR=.
 T="$MODDIR/bin/tuner.sh"
 cur=$(sh "$T" status | sed -n 's/^mode=//p')

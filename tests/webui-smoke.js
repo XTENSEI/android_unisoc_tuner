@@ -135,6 +135,7 @@ const sandbox = {
   document,
   XMLHttpRequest: XHR,
   location: { protocol: "http:", hostname: "127.0.0.1", search: "?t=tok" },
+  setTimeout,
   console,
 };
 sandbox.window = sandbox;

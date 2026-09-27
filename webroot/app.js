@@ -141,19 +141,29 @@
     });
   }
 
-  function get(path) {
+  function get(path, tries) {
+    const left0 = tries || 1;
     return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("GET", path, true);
-      xhr.onload = () => resolve(xhr.responseText || "");
-      xhr.onerror = () => resolve("");
-      xhr.send();
+      const attempt = (left) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", path, true);
+        xhr.onload = () => resolve(xhr.responseText || "");
+        xhr.onerror = () => {
+          if (left > 1 && typeof setTimeout === "function") {
+            setTimeout(() => attempt(left - 1), 200);
+          } else {
+            resolve("");
+          }
+        };
+        xhr.send();
+      };
+      attempt(left0);
     });
   }
 
   function api(script, args) {
     return get("/api?t=" + encodeURIComponent(TOKEN) + "&run=" + script +
-      (args ? "&args=" + encodeURIComponent(args) : ""));
+      (args ? "&args=" + encodeURIComponent(args) : ""), 4);
   }
 
   function cmdFor(script, args) {
@@ -327,7 +337,7 @@
 
   // `set` applies as it saves, so a batch is just the calls in order
   function applySet(script, jobs, reload, label) {
-    if (busy) return;
+    if (busy) { say(label + ": still applying the previous change"); return; }
     if (!jobs.length) { say(label + ": nothing changed"); return; }
     busy = true;
     say(label + ": " + jobs.join(", "));
@@ -351,7 +361,7 @@
   }
 
   function resetTo(script, label, reload) {
-    if (busy) return;
+    if (busy) { say(label + ": still applying the previous change"); return; }
     busy = true;
     say(label + " ...");
     run(script, "reset").then((o) => {
@@ -364,7 +374,7 @@
   }
 
   function report(script, args, label) {
-    if (busy) return;
+    if (busy) { say(label + ": still applying the previous change"); return; }
     busy = true;
     say(label + " ...");
     run(script, args).then((o) => {
@@ -403,7 +413,7 @@
     if (busy) return Promise.resolve();
     busy = true;
     say("reading device state ...");
-    return Promise.all([gpuRead(), cpuRead(), dvRead(), readLog()]).then(() => {
+    return gpuRead().then(cpuRead).then(dvRead).then(readLog).then(() => {
       busy = false;
       const errs = [gerr, serr, dverr].filter((x) => x);
       say(errs.length ? "warnings: " + errs.join(" | ") : "state read");
@@ -425,7 +435,7 @@
       el("cpu").style.display = W.cpu ? "" : "none";
       el("dv").style.display = W.dv ? "" : "none";
     }
-    if (SERVER) return get("/where?t=" + encodeURIComponent(TOKEN)).then(adopt);
+    if (SERVER) return get("/where?t=" + encodeURIComponent(TOKEN), 4).then(adopt);
     let probe = 'D=""; for c in ' + CANDS.join(" ") + '; do [ -f "$c/module.prop" ] && D=$c; done; ';
     probe += 'echo dir=$D; echo ver=$(sed -n "s/^version=//p" "$D/module.prop" 2>/dev/null); ';
     probe += 'for f in system dvfs doctor; do [ -f "$D/bin/$f.sh" ] && echo has_$f=1; done';

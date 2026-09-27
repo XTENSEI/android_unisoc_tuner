@@ -1,5 +1,5 @@
 #!/system/bin/sh
-MODDIR=${0%*}
+MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR=.
 TMPD=${UT_TMP:-/data/local/tmp}
 sh "$MODDIR/bin/serve.sh" stop >/dev/null 2>&1
