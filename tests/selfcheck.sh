@@ -392,8 +392,10 @@ if command -v nc >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
   has "unknown script rejected" "$(get "http://127.0.0.1:$PORT/api?t=$TOK&run=nope&args=status")" "unknown script"
   has "bad args rejected" "$(get "http://127.0.0.1:$PORT/api?t=$TOK&run=tuner&args=set%20MODE%3Brm")" "bad characters"
   if command -v node >/dev/null 2>&1; then
+    LIVE="node"
+    command -v timeout >/dev/null 2>&1 && LIVE="timeout 180 node"
     if UT_LIVE_URL="http://127.0.0.1:$PORT/?t=$TOK" UT_LIVE_GPU=$wdgpu UT_LIVE_CPU=$wdcpu UT_LIVE_LOG=$LOG \
-       node "$MOD/tests/webui-live.js" > "$T/live.out" 2>&1; then
+       $LIVE "$MOD/tests/webui-live.js" > "$T/live.out" 2>&1; then
       ok "live webui drives the server end to end"
     else
       bad "live webui drives the server end to end" "$(cat "$T/live.out")"

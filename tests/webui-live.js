@@ -76,7 +76,9 @@ function XHR() {
   this.open = (m, u) => { this.url = u; };
   this.send = () => {
     if (process.env.UT_LIVE_DEBUG) console.log("REQ " + this.url);
-    const req = http.get({ host: HOST, port: PORT, path: this.url }, (res) => {
+    // no pooled sockets: the server restarts its listener per request, and an
+    // idle keep-alive socket would keep this process alive forever
+    const req = http.get({ host: HOST, port: PORT, path: this.url, agent: false }, (res) => {
       let body = "";
       res.on("data", (c) => { body += c; });
       res.on("end", () => {
@@ -175,5 +177,12 @@ async function until(fn, ms) {
   has("bad input is rejected by the script", fs.readFileSync(LOG, "utf8"), "tuner reject set BOOST=9");
 
   console.log("\npassed " + pass + ", failed " + fails);
-  process.exitCode = fails ? 1 : 0;
+  process.exit(fails ? 1 : 0);
 })();
+
+// never hang a CI job: bail out with a failure if the server stops answering
+const hard = Number(process.env.UT_LIVE_TIMEOUT || 120) * 1000;
+setTimeout(() => {
+  console.log("FAIL live webui timed out after " + (hard / 1000) + "s");
+  process.exit(1);
+}, hard).unref();

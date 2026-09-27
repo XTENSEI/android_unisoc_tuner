@@ -213,5 +213,5 @@ const pump = (ms) => new Promise((r) => setTimeout(r, ms || 40));
   if (!bad_.length) ok("no stray script calls"); else bad("no stray script calls", bad_.join(" "));
 
   console.log("\npassed " + pass + ", failed " + fails);
-  process.exitCode = fails ? 1 : 0;
+  process.exit(fails ? 1 : 0);
 })();
