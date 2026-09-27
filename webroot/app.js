@@ -3,7 +3,7 @@
 
   // probe contract: the self-check verifies these five exist
   const moddir = "/data/adb/modules/unisoc-tuner";
-  const modver = "v1.0.0";
+  const modver = "v1.0.1";
   // the module always ships all three; detect() hides what this device lacks
   const modcpu = true;
   const moddv = true;
