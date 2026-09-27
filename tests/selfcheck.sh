@@ -398,7 +398,7 @@ if command -v nc >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
        $LIVE "$MOD/tests/webui-live.js" > "$T/live.out" 2>&1; then
       ok "live webui drives the server end to end"
     else
-      bad "live webui drives the server end to end" "$(cat "$T/live.out")"
+      bad "live webui drives the server end to end" "$(grep -E '^(FAIL|passed)' "$T/live.out" | head -10)"
     fi
   else
     echo "skip live webui (no node)"

@@ -150,7 +150,7 @@
         xhr.onload = () => resolve(xhr.responseText || "");
         xhr.onerror = () => {
           if (left > 1 && typeof setTimeout === "function") {
-            setTimeout(() => attempt(left - 1), 200);
+            setTimeout(() => attempt(left - 1), 250);
           } else {
             resolve("");
           }
@@ -163,7 +163,7 @@
 
   function api(script, args) {
     return get("/api?t=" + encodeURIComponent(TOKEN) + "&run=" + script +
-      (args ? "&args=" + encodeURIComponent(args) : ""), 4);
+      (args ? "&args=" + encodeURIComponent(args) : ""), 6);
   }
 
   function cmdFor(script, args) {
@@ -435,7 +435,7 @@
       el("cpu").style.display = W.cpu ? "" : "none";
       el("dv").style.display = W.dv ? "" : "none";
     }
-    if (SERVER) return get("/where?t=" + encodeURIComponent(TOKEN), 4).then(adopt);
+    if (SERVER) return get("/where?t=" + encodeURIComponent(TOKEN), 6).then(adopt);
     let probe = 'D=""; for c in ' + CANDS.join(" ") + '; do [ -f "$c/module.prop" ] && D=$c; done; ';
     probe += 'echo dir=$D; echo ver=$(sed -n "s/^version=//p" "$D/module.prop" 2>/dev/null); ';
     probe += 'for f in system dvfs doctor; do [ -f "$D/bin/$f.sh" ] && echo has_$f=1; done';
