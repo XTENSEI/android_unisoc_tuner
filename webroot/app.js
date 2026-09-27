@@ -145,16 +145,19 @@
     const left0 = tries || 1;
     return new Promise((resolve) => {
       const attempt = (left) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("GET", path, true);
-        xhr.onload = () => resolve(xhr.responseText || "");
-        xhr.onerror = () => {
+        const retry = () => {
           if (left > 1 && typeof setTimeout === "function") {
             setTimeout(() => attempt(left - 1), 250);
           } else {
             resolve("");
           }
         };
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", path, true);
+        xhr.timeout = 4000;
+        xhr.onload = () => resolve(xhr.responseText || "");
+        xhr.onerror = retry;
+        xhr.ontimeout = retry;
         xhr.send();
       };
       attempt(left0);

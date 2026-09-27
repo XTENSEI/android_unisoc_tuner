@@ -151,6 +151,7 @@ serve_loop() {
   pflag=1
   while :; do
     : > "$REQF"
+    flush_fifo
     if [ "$pflag" = 1 ]; then
       $NC -l -p "$PORT" < "$FIFO" > "$REQF" 2>>"$OUTF" &
     else
