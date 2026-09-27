@@ -169,10 +169,10 @@ if command -v git >/dev/null 2>&1; then
     $G tag -a -m v1 v1.0.0 || exit 1
   ) > "$T/notes.setup" 2>&1
   n=$(cd "$R" && sh "$MOD/tools/notes.sh" v1.0.0 2>&1)
-  has "release notes name the version" "$n" "Unisoc Tuner v1.0.0"
+  has "release notes name the version" "$n" "Unisoc Tuner $mver"
   has "release notes list the new commits" "$n" "unisotun: add the thing that changed"
   lacks "release notes stop at the previous tag" "$n" "unisotun: seed the module"
-  has "release notes say what to flash" "$n" "unisoc-tuner-v1.0.0.zip"
+  has "release notes say what to flash" "$n" "unisoc-tuner-$mver.zip"
 else
   echo "skip release notes (no git)"
 fi
