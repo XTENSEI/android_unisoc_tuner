@@ -153,6 +153,30 @@ else
   echo "skip packaging (no zip)"
 fi
 
+if command -v git >/dev/null 2>&1; then
+  R=$T/notes.git
+  mkdir -p "$R"
+  G="git -c user.email=gate@example.invalid -c user.name=gate -c commit.gpgsign=false -c tag.gpgsign=false -c init.defaultBranch=main"
+  (
+    cd "$R" || exit 1
+    cp "$MOD/module.prop" . || exit 1
+    $G init -q . || exit 1
+    $G add -A || exit 1
+    $G commit -qm "unisotun: seed the module" || exit 1
+    $G tag -a -m v0 v0.9.0 || exit 1
+    echo "# change" >> module.prop || exit 1
+    $G commit -qam "unisotun: add the thing that changed" || exit 1
+    $G tag -a -m v1 v1.0.0 || exit 1
+  ) > "$T/notes.setup" 2>&1
+  n=$(cd "$R" && sh "$MOD/tools/notes.sh" v1.0.0 2>&1)
+  has "release notes name the version" "$n" "Unisoc Tuner v1.0.0"
+  has "release notes list the new commits" "$n" "unisotun: add the thing that changed"
+  lacks "release notes stop at the previous tag" "$n" "unisotun: seed the module"
+  has "release notes say what to flash" "$n" "unisoc-tuner-v1.0.0.zip"
+else
+  echo "skip release notes (no git)"
+fi
+
 echo "== gpu (tuner.sh) =="
 o=$(rung status); show "tuner.sh status" "$o"
 has "status reports mode" "$o" "mode="
